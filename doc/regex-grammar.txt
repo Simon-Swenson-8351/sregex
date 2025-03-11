@@ -1,0 +1,33 @@
+text -> expr;
+expr -> expr_choice;
+expr_choice -> expr_sequence, {"|", expr_sequence};
+expr_sequence -> quantified_atom+;
+quantified_atom -> atom, quantifier?;
+atom -> char_in_seq | char_class | char_class_special | grouping;
+grouping -> "(", expr, ")";
+#   escaped characters:
+#       escape character:
+#           \
+#       regex meta-characters:
+#           [ ] { } ( ) | ? * + . ^ -
+#           may need disambiguation in the top-level expression:
+#               [ { ( | ? * + .
+#           may need disambiguation in a grouping:
+#               [ { ( ) | ? * + .
+#           Let's group the top level expression escapes and grouping escapes.
+#           may need disambiguation in a character class:
+#               ] . ^ -
+#           For the sake of simplicity, if an opening brace needs to be escaped in a context, the closing brace should 
+#           be escaped as well, and vice versa.
+#   regex character classes:
+#       \w (alphanum + underscore) \W (not alphanum + underscore) \d (digit) \D (not digit) \s (space) \S (not space)
+#   C escape characters (hard to print and/or arbitrary characters):
+#       \a \b \e \f \n \r \t \v \OOO \xXX \uXXXX \UXXXXXXXX
+char_class_special -> "\\w" | "\\W" | "\\d" | "\\D" | "\\s" | "\\S";
+char_class -> "[", "^"?, char_class_atom+, "]";
+char_class_atom -> char_in_class | char_range | char_class_special;
+char_range -> char_in_class, "-", char_in_class;
+quantifier -> "?" | "*" | "+" | "{", natural_number, ",", natural_number "}" | "{,", natural_number, "}" | "{", natural_number, ",}" | "{", natural_number, "}";
+natural_number -> "0" | /[1-9][0-9]*/;
+char_in_seq -> /[^\[\]\{\}\(\)\|\?\*\+\.\\]|\\a|\\b|\\e|\\f|\\n|\\r|\\t|\\v|\\\\|\\[0-7]{3}|\\x[0-9a-f]{2}|\\u[0-9a-f]{4}|\\U[0-9a-f]{8}|\\\[|\\\]|\\\{|\\\}|\\\(|\\\)|\\\||\\\?|\\\*|\\\+|\\\.|\\\\/;
+char_in_class -> /[^\[\]\.\^\-\\]|\\a|\\b|\\e|\\f|\\n|\\r|\\t|\\v|\\\\|\\[0-7]{3}|\\x[0-9a-f]{2}|\\u[0-9a-f]{4}|\\U[0-9a-f]{8}|\\\[|\\\]|\\\.|\\\^|\\\-|\\\\/;
