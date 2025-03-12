@@ -75,24 +75,26 @@ sregex_result_t parse_quantified_atom(char *borrowed_input_string, size_t cursor
     sregex_result_t result = 0;
     prod_atom_t parsed_atom;
     result = parse_atom(borrowed_input_string, cursor_pos, &parsed_atom, &cursor_pos);
-    if(result) 
+    if(result) goto cleanup_out;
+    out->atom = parsed_atom;
+    result = parse_quantifier(borrowed_input_string, cursor_pos, &parsed_atom->);
 
 cleanup_out:
-    free(*out);
+    clear_quantified_atom(out);
 end:
     return result;
 }
 
-sregex_result_t parse_atom(char *borrowed_input_string, size_t cursor_pos, prod_atom_t **out, size_t *out_cursor_pos);
+sregex_result_t parse_atom(char *borrowed_input_string, size_t cursor_pos, prod_atom_t *out, size_t *out_cursor_pos);
 sregex_result_t parse_quantifier(char *borrowed_input_string, size_t cursor_pos, size_t *quantifier_min_incl, size_t *quantifier_max_incl, size_t *out_cursor_pos);
 sregex_result_t parse_natural_number(char *borrowed_input_string, size_t cursor_pos, unsigned int *out, size_t *out_cursor_pos);
 sregex_result_t parse_char_in_seq(char *borrowed_input_string, size_t cursor_pos, sregex_char *out, size_t *out_cursor_pos);
-sregex_result_t parse_char_class(char *borrowed_input_string, size_t cursor_pos, prod_atom_t **out, size_t *out_cursor_pos);
+sregex_result_t parse_char_class(char *borrowed_input_string, size_t cursor_pos, prod_atom_t *out, size_t *out_cursor_pos);
 sregex_result_t parse_char_class_special(char *borrowed_input_string, size_t cursor_pos, prod_char_class_atom_type_t *out, size_t *out_cursor_pos);
-sregex_result_t parse_grouping(char *borrowed_input_string, size_t cursor_pos, prod_expr_t **out, size_t *out_cursor_pos);
-sregex_result_t parse_char_class_atom(char *borrowed_input_string, size_t cursor_pos, prod_char_class_atom_t **out, size_t *out_cursor_pos);
+sregex_result_t parse_grouping(char *borrowed_input_string, size_t cursor_pos, prod_expr_t *out, size_t *out_cursor_pos);
+sregex_result_t parse_char_class_atom(char *borrowed_input_string, size_t cursor_pos, prod_char_class_atom_t *out, size_t *out_cursor_pos);
 sregex_result_t parse_char_in_class(char *borrowed_input_string, size_t cursor_pos, sregex_char *out, size_t *out_cursor_pos);
-sregex_result_t parse_char_range(char *borrowed_input_string, size_t cursor_pos, prod_char_range_t **out, size_t *out_cursor_pos);
+sregex_result_t parse_char_range(char *borrowed_input_string, size_t cursor_pos, prod_char_range_t *out, size_t *out_cursor_pos);
 
 static bool peek(char *str, size_t pos, char *tok)
 {
