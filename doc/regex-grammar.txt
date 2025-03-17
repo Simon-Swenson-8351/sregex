@@ -3,7 +3,7 @@ expr -> expr_choice;
 expr_choice -> expr_sequence, {"|", expr_sequence};
 expr_sequence -> quantified_atom+;
 quantified_atom -> atom, quantifier?;
-atom -> char_in_seq | char_class | char_class_special | grouping;
+atom -> grouping | char_class | char_class_special | char_in_seq;
 grouping -> "(", expr, ")";
 #   escaped characters:
 #       escape character:
