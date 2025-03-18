@@ -203,6 +203,14 @@ succeeded:
 sregex_result_t parse_natural_number(char *borrowed_input_string, size_t *rw_cursor_pos, unsigned int *out)
 {
     size_t internal_cursor_pos = *rw_cursor_pos;
+    if(borrowed_input_string[*rw_cursor_pos] < '0' || borrowed_input_string[*rw_cursor_pos] > '9') return SREGEX_RESULT_PARSE_FAILED;
+    if(borrowed_input_string[*rw_cursor_pos] == '0' && // started with 0
+        *rw_cursor_pos + 1 < strlen(borrowed_input_string) && // and next position will not be off the end of the string
+        borrowed_input_string[*rw_cursor_pos + 1] >= '0' && // and next character is another digit
+        borrowed_input_string[*rw_cursor_pos + 1] <= '9')
+    {
+        return SREGEX_RESULT_PARSE_FAILED;
+    }
     unsigned int accumulator = 0;
     for(; borrowed_input_string[internal_cursor_pos] >= '0' && borrowed_input_string[internal_cursor_pos] <= '9'; internal_cursor_pos++)
     {
@@ -217,7 +225,118 @@ sregex_result_t parse_natural_number(char *borrowed_input_string, size_t *rw_cur
 
 sregex_result_t parse_char_in_seq(char *borrowed_input_string, size_t *rw_cursor_pos, sregex_char *out)
 {
-
+    size_t internal_cursor_pos = *rw_cursor_pos;
+    switch(borrowed_input_string[*rw_cursor_pos])
+    {
+    case '[':
+        // intentional fallthrough
+    case ']':
+        // intentional fallthrough
+    case '{':
+        // intentional fallthrough
+    case '}':
+        // intentional fallthrough
+    case '(':
+        // intentional fallthrough
+    case ')':
+        // intentional fallthrough
+    case '|':
+        // intentional fallthrough
+    case '?':
+        // intentional fallthrough
+    case '*':
+        // intentional fallthrough
+    case '+':
+        // intentional fallthrough
+    case '.':
+        return SREGEX_RESULT_PARSE_FAILED;
+    case '\\':
+        internal_cursor_pos++;
+        if(internal_cursor_pos >= strlen(borrowed_input_string)) return SREGEX_RESULT_PARSE_FAILED;
+        int escRep = -1;
+        switch(borrowed_input_string[internal_cursor_pos])
+        {
+        case 'a':
+            *out = '\x07';
+            break;
+        case 'b':
+            *out = '\x08';
+            break;
+        case 'e':
+            *out = '\x1b';
+            break;
+        case 'f':
+            *out = '\x0c';
+            break;
+        case 'n':
+            *out = '\x0a';
+            break;
+        case 'r':
+            *out = '\x0d';
+            break;
+        case 't':
+            *out = '\x09';
+            break;
+        case 'v':
+            *out = '\x0b';
+            break;
+        case '0':
+        case '1':
+        case '2':
+        case '3':
+        case '4':
+        case '5':
+        case '6':
+        case '7':
+            // octal
+            escRep = (int)(borrowed_input_string[internal_cursor_pos] - '0');
+            internal_cursor_pos++;
+            if(borrowed_input_string[internal_cursor_pos] <= '0' || borrowed_input_string[internal_cursor_pos] >= '9') return SREGEX_RESULT_PARSE_FAILED;
+            escRep <<= 3;
+            escRep += (int)(borrowed_input_string[internal_cursor_pos] - '0');
+            internal_cursor_pos++;
+            if(borrowed_input_string[internal_cursor_pos] <= '0' || borrowed_input_string[internal_cursor_pos] >= '9') return SREGEX_RESULT_PARSE_FAILED;
+            escRep <<= 3;
+            escRep += (int)(borrowed_input_string[internal_cursor_pos] - '0');
+            internal_cursor_pos++;
+            break;
+        case 'x':
+            // hex XX
+            escRep = 0;
+            switch()
+            break;
+        case 'u':
+            // unicode XXXX
+            break;
+        case 'U':
+            // unicode XXXXXXXX
+            break;
+        case '[':
+        case ']':
+        case '{':
+        case '}':
+        case '(':
+        case ')':
+        case '|':
+        case '?':
+        case '*':
+        case '+':
+        case '.':
+        case '/':
+        case '\\':
+            *out = borrowed_input_string[internal_cursor_pos];
+            internal_cursor_pos++;
+            break;
+        default:
+            return SREGEX_RESULT_PARSE_FAILED;
+            break;
+        }
+        break;
+    default:
+        *out = borrowed_input_string[*rw_cursor_pos];
+        internal_cursor_pos++;
+        break;
+    }
 }
 
 sregex_result_t parse_char_class(char *borrowed_input_string, size_t *rw_cursor_pos, prod_atom_t *out);
@@ -225,7 +344,7 @@ sregex_result_t parse_char_class_special(char *borrowed_input_string, size_t *rw
 sregex_result_t parse_grouping(char *borrowed_input_string, size_t *rw_cursor_pos, prod_expr_t *out);
 sregex_result_t parse_char_class_atom(char *borrowed_input_string, size_t *rw_cursor_pos, prod_char_class_atom_t *out);
 sregex_result_t parse_char_in_class(char *borrowed_input_string, size_t *rw_cursor_pos, sregex_char *out);
-sregex_result_t parse_char_range(char *borrowed_input_string, size_t cursor_pos, prod_char_range_t *out, size_t *out_cursor_pos);
+sregex_result_t parse_char_range(char *borrowed_input_string, size_t *rw_cursor_pos, prod_char_range_t *out);
 
 void clear_expr(prod_expr_t *to_clear);
 void clear_expr_sequence(prod_expr_sequence_t *to_clear);
