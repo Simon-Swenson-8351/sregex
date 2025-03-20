@@ -1,5 +1,5 @@
 #pragma once
 
-typedef int sregex_result_t;
+typedef int sregex_result_td;
 
-char *sregex_result_to_string(sregex_result_t err);
+char const *sregex_result_to_string(sregex_result_td err);

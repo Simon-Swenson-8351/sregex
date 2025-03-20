@@ -9,26 +9,26 @@
 static bool peek(char *str, size_t pos, char *tok);
 static bool peek_char(char *str, size_t pos, char tok);
 
-sregex_result_t parse_tree_create(char *borrowed_input_string, parse_tree_t **out_created)
+sregex_result_td parse_tree_create(sregex_str_td *borrowed_input_string, struct parse_tree **out_created)
 {
-    sregex_result_t result = SREGEX_RESULT_SUCCESS;
-    *out_created = malloc(sizeof(parse_tree_t));
+    sregex_result_td result = SREGEX_RESULT_SUCCESS;
+    *out_created = malloc(sizeof(struct parse_tree));
     size_t cursor_pos = 0;
-    result = parse_expr(borrowed_input_string, &cursor_pos, *out_created);
+    result = parse_expr(borrowed_input_string, &cursor_pos, &((*out_created)->root));
     if(result) free(*out_created);
     return result;
 }
 
-sregex_result_t parse_expr(char *borrowed_input_string, size_t *rw_cursor_pos, prod_expr_t *out)
+sregex_result_td parse_expr(sregex_str_td *borrowed_input_string, size_t *rw_cursor_pos, struct prod_expr *out)
 {
-    sregex_result_t result;
+    sregex_result_td result;
     size_t internal_cursor_pos = *rw_cursor_pos;
     out->choices = NULL;
     out->choices_len = 0;
     
     while(true)
     {
-        prod_expr_sequence_t seq_to_add;
+        struct prod_expr_sequence seq_to_add;
         result = parse_sequence(borrowed_input_string, internal_cursor_pos, &seq_to_add);
         if(result) goto failed;
         out->choices = reallocarray(out->choices, out->choices_len + 1, sizeof(out->choices[0]));
@@ -53,16 +53,16 @@ failed:
     return result;
 }
 
-sregex_result_t parse_sequence(char *borrowed_input_string, size_t *rw_cursor_pos, prod_expr_sequence_t *out)
+sregex_result_td parse_sequence(sregex_str_td *borrowed_input_string, size_t *rw_cursor_pos, struct prod_expr_sequence *out)
 {
-    sregex_result_t result;
+    sregex_result_td result;
     size_t internal_cursor_pos = *rw_cursor_pos;
     out->quantified_atoms = NULL;
     out->quantified_atoms_len = 0;
 
     while(true)
     {
-        prod_quantified_atom_t qual_atom_to_add;
+        struct prod_quantified_atom qual_atom_to_add;
         result = parse_quantified_atom(borrowed_input_string, &internal_cursor_pos, &qual_atom_to_add);
         if(result)
         {
@@ -86,11 +86,11 @@ failed:
     return result;
 }
 
-sregex_result_t parse_quantified_atom(char *borrowed_input_string, size_t *rw_cursor_pos, prod_quantified_atom_t *out)
+sregex_result_td parse_quantified_atom(sregex_str_td *borrowed_input_string, size_t *rw_cursor_pos, struct prod_quantified_atom *out)
 {
-    sregex_result_t result;
+    sregex_result_td result;
     size_t internal_cursor_pos = *rw_cursor_pos;
-    prod_atom_t parsed_atom;
+    struct prod_atom parsed_atom;
     result = parse_atom(borrowed_input_string, &internal_cursor_pos, &parsed_atom);
     if(result) return result;
     unsigned int qtf_min = 1;
@@ -104,9 +104,9 @@ sregex_result_t parse_quantified_atom(char *borrowed_input_string, size_t *rw_cu
     return result;
 }
 
-sregex_result_t parse_atom(char *borrowed_input_string, size_t *rw_cursor_pos, prod_atom_t *out)
+sregex_result_td parse_atom(sregex_str_td *borrowed_input_string, size_t *rw_cursor_pos, struct prod_atom *out)
 {
-    sregex_result_t result;
+    sregex_result_td result;
     size_t internal_cursor_pos = *rw_cursor_pos;
     result = parse_grouping(borrowed_input_string, &internal_cursor_pos, &out->data.grouping);
     if(!result)
@@ -120,7 +120,7 @@ sregex_result_t parse_atom(char *borrowed_input_string, size_t *rw_cursor_pos, p
         out->type = PROD_ATOM_TYPE_CHAR_CLASS;
         goto succeeded;
     }
-    prod_char_class_atom_type_t special_type;
+    enum prod_char_class_atom_type special_type;
     result = parse_char_class_special(borrowed_input_string, &internal_cursor_pos, &special_type);
     if(!result)
     {
@@ -135,9 +135,9 @@ succeeded:
     return result;
 }
 
-sregex_result_t parse_quantifier(char *borrowed_input_string, size_t *rw_cursor_pos, unsigned int *out_quantifier_min_incl, unsigned int *out_quantifier_max_incl)
+sregex_result_td parse_quantifier(sregex_str_td *borrowed_input_string, size_t *rw_cursor_pos, unsigned int *out_quantifier_min_incl, unsigned int *out_quantifier_max_incl)
 {
-    sregex_result_t result;
+    sregex_result_td result;
     size_t internal_cursor_pos = *rw_cursor_pos;
     if(peek_char(borrowed_input_string, internal_cursor_pos, '?'))
     {
@@ -200,7 +200,7 @@ succeeded:
     return result;
 }
 
-sregex_result_t parse_natural_number(char *borrowed_input_string, size_t *rw_cursor_pos, unsigned int *out)
+sregex_result_td parse_natural_number(sregex_str_td *borrowed_input_string, size_t *rw_cursor_pos, unsigned int *out)
 {
     size_t internal_cursor_pos = *rw_cursor_pos;
     if(borrowed_input_string[*rw_cursor_pos] < '0' || borrowed_input_string[*rw_cursor_pos] > '9') return SREGEX_RESULT_PARSE_FAILED;
@@ -223,7 +223,7 @@ sregex_result_t parse_natural_number(char *borrowed_input_string, size_t *rw_cur
     return SREGEX_RESULT_SUCCESS;
 }
 
-sregex_result_t parse_char_in_seq(char *borrowed_input_string, size_t *rw_cursor_pos, sregex_char *out)
+sregex_result_td parse_char_in_seq(char *borrowed_input_string, size_t *rw_cursor_pos, sregex_char_td *out)
 {
     size_t internal_cursor_pos = *rw_cursor_pos;
     switch(borrowed_input_string[*rw_cursor_pos])
@@ -339,35 +339,36 @@ sregex_result_t parse_char_in_seq(char *borrowed_input_string, size_t *rw_cursor
     }
 }
 
-sregex_result_t parse_char_class(char *borrowed_input_string, size_t *rw_cursor_pos, prod_atom_t *out);
-sregex_result_t parse_char_class_special(char *borrowed_input_string, size_t *rw_cursor_pos, prod_char_class_atom_type_t *out);
-sregex_result_t parse_grouping(char *borrowed_input_string, size_t *rw_cursor_pos, prod_expr_t *out);
-sregex_result_t parse_char_class_atom(char *borrowed_input_string, size_t *rw_cursor_pos, prod_char_class_atom_t *out);
-sregex_result_t parse_char_in_class(char *borrowed_input_string, size_t *rw_cursor_pos, sregex_char *out);
-sregex_result_t parse_char_range(char *borrowed_input_string, size_t *rw_cursor_pos, prod_char_range_t *out);
+sregex_result_td parse_char_class(char *borrowed_input_string, size_t *rw_cursor_pos, struct prod_atom *out);
+sregex_result_td parse_char_class_special(char *borrowed_input_string, size_t *rw_cursor_pos, enum prod_char_class_atom_type *out);
+sregex_result_td parse_grouping(char *borrowed_input_string, size_t *rw_cursor_pos, struct prod_expr *out);
+sregex_result_td parse_char_class_atom(char *borrowed_input_string, size_t *rw_cursor_pos, struct prod_char_class_atom *out);
+sregex_result_td parse_char_in_class(char *borrowed_input_string, size_t *rw_cursor_pos, sregex_char_td *out);
+sregex_result_td parse_char_range(char *borrowed_input_string, size_t *rw_cursor_pos, struct prod_char_range *out);
 
-void clear_expr(prod_expr_t *to_clear);
-void clear_expr_sequence(prod_expr_sequence_t *to_clear);
-void clear_quantified_atom(prod_quantified_atom_t *to_clear);
-void clear_atom(prod_atom_t *to_clear);
-void clear_char_class(prod_char_class_t *to_clear);
-void clear_char_class_atom(prod_char_class_atom_t *to_clear);
-void clear_char_range(prod_char_range_t *to_clear);
+void clear_expr(struct prod_expr *to_clear);
+void clear_expr_sequence(struct prod_expr_sequence *to_clear);
+void clear_quantified_atom(struct prod_quantified_atom *to_clear);
+void clear_atom(struct prod_atom *to_clear);
+void clear_char_class(struct prod_char_class *to_clear);
+void clear_char_class_atom(struct prod_char_class_atom *to_clear);
+void clear_char_range(struct prod_char_range *to_clear);
 
-static bool peek(char *str, size_t pos, char *tok)
+static bool peek(sregex_str_td *str, size_t pos, sregex_str_td *tok)
 {
     if(pos > strlen(str)) return false;
     str += pos;
     pos = 0;
     while(true)
     {
+        if(tok[pos] == '\0')
         if(str[pos] != tok[pos]) return false;
         if(str[pos] == '\0') return true;
         pos++;
     }
 }
 
-static bool peek_char(char *str, size_t pos, char tok)
+static bool peek_char(sregex_str_td *str, size_t pos, sregex_char_td tok)
 {
     if(pos > strlen(str)) return false;
     return str[pos] == tok;
