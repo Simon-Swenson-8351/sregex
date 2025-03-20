@@ -6,8 +6,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-static bool peek(char *str, size_t pos, char *tok);
-static bool peek_char(char *str, size_t pos, char tok);
+static bool peek(sregex_str_td *str, size_t pos, sregex_str_td *tok);
+static bool peek_char(sregex_str_td *str, size_t pos, sregex_char_td tok);
 
 sregex_result_td parse_tree_create(sregex_str_td *borrowed_input_string, struct parse_tree **out_created)
 {
