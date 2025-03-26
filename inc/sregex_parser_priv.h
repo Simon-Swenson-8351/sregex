@@ -82,78 +82,82 @@ struct prod_expr
 
 struct parse_tree
 {
-    struct prod_expr root; // amusing since it's borrowing from itself, an element in owned_node_pool
+    struct prod_expr root;
 };
 
-sregex_result_td parse_tree_create(sregex_str_td *borrowed_input_string, struct parse_tree **out_created);
-sregex_result_td parse_tree_destroy(struct parse_tree *given_to_destroy);
+struct parse_tree_create_result
+{
+    sregex_result_td   result_code;
+    size_t             error_index;
+    struct parse_tree *owned_created;
+};
+struct parse_tree_create_result parse_tree_create(sregex_str_td *borrowed_input_string);
+void parse_tree_destroy(struct parse_tree *given_to_destroy);
 
 sregex_result_td parse_expr
 (
-    sregex_str_td *borrowed_input_string,
-    size_t *rw_cursor_pos,
+    struct sregex_str_iter *rw_cur_pos,
     struct prod_expr *out
 );
 sregex_result_td parse_sequence
 (
-    sregex_str_td *borrowed_input_string,
-    size_t *rw_cursor_pos,
+    struct sregex_str_iter *rw_cur_pos,
     struct prod_expr_sequence *out
 );
-sregex_result_td parse_quantified_atom(
-    sregex_str_td *borrowed_input_string,
-    size_t *rw_cursor_pos,
+sregex_result_td parse_quantified_atom
+(
+    struct sregex_str_iter *rw_cur_pos,
     struct prod_quantified_atom *out
 );
-sregex_result_td parse_atom(
-    sregex_str_td *borrowed_input_string,
-    size_t *rw_cursor_pos,
+sregex_result_td parse_atom
+(
+    struct sregex_str_iter *rw_cur_pos,
     struct prod_atom *out
 );
-sregex_result_td parse_quantifier(
-    sregex_str_td *borrowed_input_string,
-    size_t *rw_cursor_pos,
+sregex_result_td parse_quantifier
+(
+    struct sregex_str_iter *rw_cur_pos,
     unsigned int *out_quantifier_min_incl,
     unsigned int *out_quantifier_max_incl
 );
-sregex_result_td parse_natural_number(
-    sregex_str_td *borrowed_input_string,
-    size_t *rw_cursor_pos,
+sregex_result_td parse_natural_number
+(
+    struct sregex_str_iter *rw_cur_pos,
     unsigned int *out
 );
-sregex_result_td parse_char_in_seq(
-    sregex_str_td *borrowed_input_string,
-    size_t *rw_cursor_pos,
+sregex_result_td parse_char_in_seq
+(
+    struct sregex_str_iter *rw_cur_pos,
     sregex_char_td *out
 );
-sregex_result_td parse_char_class(
-    sregex_str_td *borrowed_input_string,
-    size_t *rw_cursor_pos,
+sregex_result_td parse_char_class
+(
+    struct sregex_str_iter *rw_cur_pos,
     struct prod_atom *out
 );
-sregex_result_td parse_char_class_special(
-    sregex_str_td *borrowed_input_string,
-    size_t *rw_cursor_pos,
+sregex_result_td parse_char_class_special
+(
+    struct sregex_str_iter *rw_cur_pos,
     enum prod_char_class_atom_type *out
 );
-sregex_result_td parse_grouping(
-    sregex_str_td *borrowed_input_string,
-    size_t *rw_cursor_pos,
+sregex_result_td parse_grouping
+(
+    struct sregex_str_iter *rw_cur_pos,
     struct prod_expr *out
 );
-sregex_result_td parse_char_class_atom(
-    sregex_str_td *borrowed_input_string,
-    size_t *rw_cursor_pos,
+sregex_result_td parse_char_class_atom
+(
+    struct sregex_str_iter *rw_cur_pos,
     struct prod_char_class_atom *out
 );
-sregex_result_td parse_char_in_class(
-    sregex_str_td *borrowed_input_string,
-    size_t *rw_cursor_pos,
+sregex_result_td parse_char_in_class
+(
+    struct sregex_str_iter *rw_cur_pos,
     sregex_char_td *out
 );
-sregex_result_td parse_char_range(
-    sregex_str_td *borrowed_input_string,
-    size_t *rw_cursor_pos,
+sregex_result_td parse_char_range
+(
+    struct sregex_str_iter *rw_cur_pos,
     struct prod_char_range *out
 );
 

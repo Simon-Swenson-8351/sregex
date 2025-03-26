@@ -5,21 +5,103 @@
 
 #include "sregex_result_priv.h"
 
-static bool sregex_utf8_char_validate(sregex_str_td *to_validate, size_t to_validate_len, size_t *out_num_bytes);
-
-bool sregex_char_validate(sregex_char_td to_validate)
+bool sregex_char_validate(sregex_char_td const to_validate)
 {
+    // Technically you'd need to verify that the code point belongs to an assigned block, but we won't go that deep
+    // here.
     return to_validate > 0x0010FFFF;
 }
 
+enum sregex_str_validate_state
+{
+    SREGEX_STR_VALIDATE_STATE_NEW_CHAR,
+    SREGEX_STR_VALIDATE_STATE_1_TRAILING_BYTE,
+    SREGEX_STR_VALIDATE_STATE_2_TRAILING_BYTES,
+    SREGEX_STR_VALIDATE_STATE_3_TRAILING_BYTES_CHECK_OVERLONG,
+    SREGEX_STR_VALIDATE_STATE_3_TRAILING_BYTES
+};
 size_t sregex_str_validate(sregex_str_td *borrowed_to_validate, size_t to_validate_len)
 {
-    size_t decoded_size;
-    for(size_t i = 0; i < to_validate_len; i += decoded_size)
+    enum sregex_str_validate_state state = SREGEX_STR_VALIDATE_STATE_NEW_CHAR;
+    size_t i;
+    for(i = 0; i < to_validate_len; i++)
     {
-        if(!sregex_utf8_char_validate(borrowed_to_validate + i, to_validate_len - i, &decoded_size)) return i;
+        switch(state)
+        {
+            case SREGEX_STR_VALIDATE_STATE_NEW_CHAR:
+                // We need to avoid overlong encodings
+                // 1-byte seq can encode 7 bits
+                // 2-byte seq can encode 11 bits
+                // Need to check that byte[0], bits[3..5] are non-zero
+                // 3-byte seq can encode 16 bits
+                // Need to check that byte[0], bits[4..7] are non-zero
+                // 4-byte seq can encode 21 bits
+                // Need to check that byte[0], bits[5..7] and byte[1], bits[2..3] are non-zero
+                if(0x80 & borrowed_to_validate[i] == 0)
+                {
+                    // assume 1-byte character
+                    // State can remain the same, as we'll go to the next character.
+                    // Any value for bits[1..7] are valid.
+                }
+                else if(0xe0 & borrowed_to_validate[i] == 0xc0)
+                {
+                    // assume 2-byte character
+                    // check that byte[0], bits[3..5] are non-zero
+                    if(!(0x1c & borrowed_to_validate[i])) return i;
+                    state = SREGEX_STR_VALIDATE_STATE_1_TRAILING_BYTE;
+                }
+                else if(0xf0 & borrowed_to_validate[i] == 0xe0)
+                {
+                    // assume 3-byte character
+                    // check that byte[0], bits[4..7] are non-zero
+                    if(!(0x0f & borrowed_to_validate[i])) return i;
+                    state = SREGEX_STR_VALIDATE_STATE_2_TRAILING_BYTES;
+                }
+                else if(0xf8 & borrowed_to_validate[i] == 0xf0)
+                {
+                    // assume 4-byte character
+                    // check that byte[0], bits[5..7] are non-zero
+                    if(0x07 & borrowed_to_validate[i])
+                    {
+                        state = SREGEX_STR_VALIDATE_STATE_3_TRAILING_BYTES;
+                    }
+                    else
+                    {
+                        state = SREGEX_STR_VALIDATE_STATE_3_TRAILING_BYTES_CHECK_OVERLONG;
+                    }
+                }
+                else
+                {
+                    // unexpected sequence
+                    return i;
+                }
+                break;
+            case SREGEX_STR_VALIDATE_STATE_1_TRAILING_BYTE:
+                if(!(0xc0 & borrowed_to_validate[i] == 0x80)) return i;
+                state = SREGEX_STR_VALIDATE_STATE_NEW_CHAR;
+                break;
+            case SREGEX_STR_VALIDATE_STATE_2_TRAILING_BYTES:
+                if(!(0xc0 & borrowed_to_validate[i] == 0x80)) return i;
+                state = SREGEX_STR_VALIDATE_STATE_1_TRAILING_BYTE;
+                break;
+            case SREGEX_STR_VALIDATE_STATE_3_TRAILING_BYTES_CHECK_OVERLONG:
+                // byte 2 of a 4-byte character.
+                // check that byte[1], bits[2..3] are non-zero if byte[0], bits[5..7] were zero.
+                if(!(0x30 & borrowed_to_validate[i])) return i;
+                // fallthrough
+            case SREGEX_STR_VALIDATE_STATE_3_TRAILING_BYTES:
+                if(!(0xc0 & borrowed_to_validate[i] == 0x80)) return i;
+                state = SREGEX_STR_VALIDATE_STATE_2_TRAILING_BYTES;
+                break;
+        }
     }
+    if(state != SREGEX_STR_VALIDATE_STATE_NEW_CHAR) return i;
     return SIZE_MAX;
+}
+
+sregex_char_td sregex_ascii_to_char(char c)
+{
+    return *(uint8_t *)(&c);
 }
 
 struct sregex_str_to_char_result sregex_str_to_char(sregex_str_td *borrowed_str)
@@ -125,15 +207,15 @@ int sregex_str_cmp(sregex_str_td *borrowed_a, sregex_str_td *borrowed_b)
     }
 }
 
-bool sregex_str_cat(sregex_str_td *borrowed_first, sregex_str_td *borrowed_second, sregex_str_td **out)
+sregex_str_td *sregex_str_cat(sregex_str_td *borrowed_first, sregex_str_td *borrowed_second)
 {
     size_t f_len = strlen(borrowed_first);
     size_t s_len = strlen(borrowed_second);
-    *out = malloc(f_len + s_len + 1);
-    if(!(*out)) return false;
-    memcpy(*out, borrowed_first, f_len);
-    memcpy(*out + f_len, borrowed_second, s_len + 1);
-    return true;
+    sregex_str_td *result = malloc(f_len + s_len + 1);
+    if(!result) return result;
+    memcpy(result, borrowed_first, f_len);
+    memcpy(result + f_len, borrowed_second, s_len + 1);
+    return result;
 }
 
 sregex_char_td sregex_str_iter_step(struct sregex_str_iter *borrowed_iter)
@@ -157,54 +239,4 @@ sregex_char_td sregex_str_iter_get_char(struct sregex_str_iter *borrowed_iter)
 bool sregex_str_iter_has_char(struct sregex_str_iter *borrowed_iter)
 {
     return sregex_str_iter_get_char(borrowed_iter);
-}
-
-static bool sregex_utf8_char_validate(sregex_str_td *to_validate, size_t to_validate_len, size_t *out_num_bytes)
-{
-    // see sregex_str_to_char, as the code is similar
-    if(to_validate_len == 0) return true; // an empty string is vacuously valid
-    sregex_char_td code_point;
-    if(!(to_validate[0] & 0x80))
-    {
-        code_point = (sregex_char_td)to_validate[0];
-        if(out_num_bytes) *out_num_bytes = 1;
-    }
-    else if(to_validate[0] & 0xe0 == 0xc0)
-    {
-        if(to_validate_len < 2) return false;
-        if(to_validate[1] & 0xc0 != 0x80) return false;
-        code_point = ((sregex_char_td)(to_validate[0] & 0x1f)) << 6;
-        code_point |= (sregex_char_td)(to_validate[1] & 0x3f);
-        if(code_point < 0x00000080) return false;
-        if(out_num_bytes) *out_num_bytes = 2;
-    }
-    else if(to_validate[0] & 0xf0 == 0xe0)
-    {
-        if(to_validate_len < 3) return false;
-        if(to_validate[1] & 0xc0 != 0x80) return false;
-        if(to_validate[2] & 0xc0 != 0x80) return false;
-        code_point = ((sregex_char_td)(to_validate[0] & 0x0f)) << 12;
-        code_point |= ((sregex_char_td)(to_validate[1] & 0x3f)) << 6;
-        code_point |= (sregex_char_td)(to_validate[2] & 0x3f);
-        if(code_point < 0x00000800) return false;
-        if(out_num_bytes) *out_num_bytes = 3;
-    }
-    else if(to_validate[0] & 0xf8 == 0xf0)
-    {
-        if(to_validate_len < 4) return false;
-        if(to_validate[1] & 0xc0 != 0x80) return false;
-        if(to_validate[2] & 0xc0 != 0x80) return false;
-        if(to_validate[3] & 0xc0 != 0x80) return false;
-        code_point = ((sregex_char_td)(to_validate[0] & 0x07)) << 18;
-        code_point |= ((sregex_char_td)(to_validate[1] & 0x3f)) << 12;
-        code_point |= ((sregex_char_td)(to_validate[2] & 0x3f)) << 6;
-        code_point |= (sregex_char_td)(to_validate[3] & 0x3f);
-        if(code_point < 0x00010000) return false;
-        if(out_num_bytes) *out_num_bytes = 4;
-    }
-    else
-    {
-        return false;
-    }
-    return true;
 }

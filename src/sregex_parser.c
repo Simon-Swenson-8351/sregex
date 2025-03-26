@@ -1,5 +1,6 @@
 #include "sregex_parser_priv.h"
 #include "sregex_result_priv.h"
+#include "sregex_str_priv.h"
 
 #include <limits.h>
 #include <stdbool.h>
@@ -9,40 +10,50 @@
 static bool peek(sregex_str_td *str, size_t pos, sregex_str_td *tok);
 static bool peek_char(sregex_str_td *str, size_t pos, sregex_char_td tok);
 
-sregex_result_td parse_tree_create(sregex_str_td *borrowed_input_string, struct parse_tree **out_created)
+struct parse_tree_create_result parse_tree_create(sregex_str_td *borrowed_input_string)
 {
-    sregex_result_td result = SREGEX_RESULT_SUCCESS;
-    *out_created = malloc(sizeof(struct parse_tree));
-    size_t cursor_pos = 0;
-    result = parse_expr(borrowed_input_string, &cursor_pos, &((*out_created)->root));
-    if(result) free(*out_created);
+    struct parse_tree_create_result result =
+    {
+        .result_code = SREGEX_RESULT_ALLOC_FAILED,
+        .error_index = 0,
+        .owned_created = malloc(sizeof(struct parse_tree))
+    };
+    if(!result.owned_created)
+    {
+        return result;
+    }
+    struct sregex_str_iter iter = {
+        .borrowed_str_cursor = borrowed_input_string
+    };
+    result.result_code = parse_expr(&iter, &(result.owned_created->root));
+    if(result.result_code) free(result.owned_created);
     return result;
 }
 
-sregex_result_td parse_expr(sregex_str_td *borrowed_input_string, size_t *rw_cursor_pos, struct prod_expr *out)
+sregex_result_td parse_expr(struct sregex_str_iter *rw_cur_pos, struct prod_expr *out)
 {
     sregex_result_td result;
-    size_t internal_cursor_pos = *rw_cursor_pos;
+    struct sregex_str_iter internal_cursor_pos = *rw_cur_pos;
     out->choices = NULL;
     out->choices_len = 0;
     
     while(true)
     {
         struct prod_expr_sequence seq_to_add;
-        result = parse_sequence(borrowed_input_string, internal_cursor_pos, &seq_to_add);
+        result = parse_sequence(&internal_cursor_pos, &seq_to_add);
         if(result) goto failed;
         out->choices = reallocarray(out->choices, out->choices_len + 1, sizeof(out->choices[0]));
         out->choices[out->choices_len] = seq_to_add;
         out->choices_len++;
-        if(!peek_char(borrowed_input_string, internal_cursor_pos, '|'))
+        if(sregex_str_iter_get_char(&internal_cursor_pos) != sregex_ascii_to_char('|'))
         {
             goto succeeded;
         }
-        internal_cursor_pos++;
+        sregex_str_iter_inc(&internal_cursor_pos);
     }
 succeeded:
     result = SREGEX_RESULT_SUCCESS;
-    *rw_cursor_pos = internal_cursor_pos;
+    *rw_cur_pos = internal_cursor_pos;
     return result;
 failed:
     for(size_t i = 0; i < out->choices_len; i++)
@@ -53,17 +64,17 @@ failed:
     return result;
 }
 
-sregex_result_td parse_sequence(sregex_str_td *borrowed_input_string, size_t *rw_cursor_pos, struct prod_expr_sequence *out)
+sregex_result_td parse_sequence(struct sregex_str_iter *rw_cur_pos, struct prod_expr_sequence *out)
 {
     sregex_result_td result;
-    size_t internal_cursor_pos = *rw_cursor_pos;
+    struct sregex_str_iter internal_cursor_pos = *rw_cur_pos;
     out->quantified_atoms = NULL;
     out->quantified_atoms_len = 0;
 
     while(true)
     {
         struct prod_quantified_atom qual_atom_to_add;
-        result = parse_quantified_atom(borrowed_input_string, &internal_cursor_pos, &qual_atom_to_add);
+        result = parse_quantified_atom(&internal_cursor_pos, &qual_atom_to_add);
         if(result)
         {
             if(out->quantified_atoms_len == 0) goto failed;
@@ -75,7 +86,7 @@ sregex_result_td parse_sequence(sregex_str_td *borrowed_input_string, size_t *rw
     }
 succeeded:
     result = SREGEX_RESULT_SUCCESS;
-    *rw_cursor_pos = internal_cursor_pos;
+    *rw_cur_pos = internal_cursor_pos;
     return result;
 failed:
     for(size_t i = 0; i < out->quantified_atoms_len; i++)
@@ -86,59 +97,59 @@ failed:
     return result;
 }
 
-sregex_result_td parse_quantified_atom(sregex_str_td *borrowed_input_string, size_t *rw_cursor_pos, struct prod_quantified_atom *out)
+sregex_result_td parse_quantified_atom(struct sregex_str_iter *rw_cur_pos, struct prod_quantified_atom *out)
 {
     sregex_result_td result;
-    size_t internal_cursor_pos = *rw_cursor_pos;
+    struct sregex_str_iter internal_cursor_pos = *rw_cur_pos;
     struct prod_atom parsed_atom;
-    result = parse_atom(borrowed_input_string, &internal_cursor_pos, &parsed_atom);
+    result = parse_atom(&internal_cursor_pos, &parsed_atom);
     if(result) return result;
     unsigned int qtf_min = 1;
     unsigned int qtf_max = 1;
-    result = parse_quantifier(borrowed_input_string, &internal_cursor_pos, &qtf_min, &qtf_max);
+    result = parse_quantifier(&internal_cursor_pos, &qtf_min, &qtf_max);
     // Quantifiers are optional, so, whether there was a quantifier or not, we should consider it a success.
     out->min_incl = qtf_min;
     out->max_incl = qtf_max;
     result = SREGEX_RESULT_SUCCESS;
-    *rw_cursor_pos = internal_cursor_pos;
+    *rw_cur_pos = internal_cursor_pos;
     return result;
 }
 
-sregex_result_td parse_atom(sregex_str_td *borrowed_input_string, size_t *rw_cursor_pos, struct prod_atom *out)
+sregex_result_td parse_atom(struct sregex_str_iter *rw_cur_pos, struct prod_atom *out)
 {
     sregex_result_td result;
-    size_t internal_cursor_pos = *rw_cursor_pos;
-    result = parse_grouping(borrowed_input_string, &internal_cursor_pos, &out->data.grouping);
+    struct sregex_str_iter internal_cursor_pos = *rw_cur_pos;
+    result = parse_grouping(&internal_cursor_pos, &out->data.grouping);
     if(!result)
     {
         out->type = PROD_ATOM_TYPE_GROUPING;
         goto succeeded;
     }
-    result = parse_char_class(borrowed_input_string, &internal_cursor_pos, &out->data.char_class);
+    result = parse_char_class(&internal_cursor_pos, &out->data.char_class);
     if(!result)
     {
         out->type = PROD_ATOM_TYPE_CHAR_CLASS;
         goto succeeded;
     }
     enum prod_char_class_atom_type special_type;
-    result = parse_char_class_special(borrowed_input_string, &internal_cursor_pos, &special_type);
+    result = parse_char_class_special(&internal_cursor_pos, &special_type);
     if(!result)
     {
         out->type = special_type;
         goto succeeded;
     }
-    result = parse_char_in_seq(borrowed_input_string, &internal_cursor_pos, &out->data.char_data);
+    result = parse_char_in_seq(&internal_cursor_pos, &out->data.char_data);
     if(result) return result;
 succeeded:
     result = SREGEX_RESULT_SUCCESS;
-    *rw_cursor_pos = internal_cursor_pos;
+    *rw_cur_pos = internal_cursor_pos;
     return result;
 }
 
-sregex_result_td parse_quantifier(sregex_str_td *borrowed_input_string, size_t *rw_cursor_pos, unsigned int *out_quantifier_min_incl, unsigned int *out_quantifier_max_incl)
+sregex_result_td parse_quantifier(struct sregex_str_iter *rw_cur_pos, unsigned int *out_quantifier_min_incl, unsigned int *out_quantifier_max_incl)
 {
     sregex_result_td result;
-    size_t internal_cursor_pos = *rw_cursor_pos;
+    struct sregex_str_iter internal_cursor_pos = *rw_cur_pos;
     if(peek_char(borrowed_input_string, internal_cursor_pos, '?'))
     {
         *out_quantifier_min_incl = 0;
@@ -162,16 +173,16 @@ sregex_result_td parse_quantifier(sregex_str_td *borrowed_input_string, size_t *
     }
     // The options for a quantifier are now: {#} {#,#} {,#} {#,}
     if(!peek_char(borrowed_input_string, internal_cursor_pos, '{')) return SREGEX_RESULT_PARSE_FAILED;
-    internal_cursor_pos++;
+    sregex_str_iter_inc(&internal_cursor_pos);
     unsigned int qty_min = 0;
     unsigned int qty_max = UINT_MAX - 1;
-    result = parse_natural_number(borrowed_input_string, &internal_cursor_pos, &qty_min);
+    result = parse_natural_number(&internal_cursor_pos, &qty_min);
     if(result)
     {
         // This is not necessarily a problem. Could be of the form. {,#}
         if(!peek_char(borrowed_input_string, internal_cursor_pos, ',')) return SREGEX_RESULT_PARSE_FAILED;
-        internal_cursor_pos++;
-        result = parse_natural_number(borrowed_input_string, &internal_cursor_pos, &qty_max);
+        sregex_str_iter_inc(&internal_cursor_pos);
+        result = parse_natural_number(&internal_cursor_pos, &qty_max);
         if(result) return SREGEX_RESULT_PARSE_FAILED;
     }
     else
@@ -179,7 +190,7 @@ sregex_result_td parse_quantifier(sregex_str_td *borrowed_input_string, size_t *
         // We've seen {# so we could see } ,#} ,}
         if(peek_char(borrowed_input_string, &internal_cursor_pos, ','))
         {
-            internal_cursor_pos++;
+            sregex_str_iter_inc(&internal_cursor_pos);
             // {#,#} {#,}
             result = parse_natural_number(borrowed_input_string, &internal_cursor_pos, &qty_max);
             // If we failed to parse a NN at this point, dw, we'll check the closing brace after this all
@@ -196,13 +207,13 @@ sregex_result_td parse_quantifier(sregex_str_td *borrowed_input_string, size_t *
     *out_quantifier_max_incl = qty_max;
 succeeded:
     result = SREGEX_RESULT_SUCCESS;
-    *rw_cursor_pos = internal_cursor_pos;
+    *rw_cur_pos = internal_cursor_pos;
     return result;
 }
 
-sregex_result_td parse_natural_number(sregex_str_td *borrowed_input_string, size_t *rw_cursor_pos, unsigned int *out)
+sregex_result_td parse_natural_number(struct sregex_str_iter *rw_cur_pos, unsigned int *out)
 {
-    size_t internal_cursor_pos = *rw_cursor_pos;
+    struct sregex_str_iter internal_cursor_pos = *rw_cur_pos;
     if(borrowed_input_string[*rw_cursor_pos] < '0' || borrowed_input_string[*rw_cursor_pos] > '9') return SREGEX_RESULT_PARSE_FAILED;
     if(borrowed_input_string[*rw_cursor_pos] == '0' && // started with 0
         *rw_cursor_pos + 1 < strlen(borrowed_input_string) && // and next position will not be off the end of the string
@@ -218,14 +229,14 @@ sregex_result_td parse_natural_number(sregex_str_td *borrowed_input_string, size
         accumulator += borrowed_input_string[internal_cursor_pos] - '0';
     }
     if(internal_cursor_pos == *rw_cursor_pos) return SREGEX_RESULT_PARSE_FAILED;
-    *rw_cursor_pos = internal_cursor_pos;
+    *rw_cur_pos = internal_cursor_pos;
     *out = accumulator;
     return SREGEX_RESULT_SUCCESS;
 }
 
-sregex_result_td parse_char_in_seq(char *borrowed_input_string, size_t *rw_cursor_pos, sregex_char_td *out)
+sregex_result_td parse_char_in_seq(struct sregex_str_iter *rw_cur_pos, sregex_char_td *out)
 {
-    size_t internal_cursor_pos = *rw_cursor_pos;
+    size_t internal_cursor_pos = *rw_cur_pos;
     switch(borrowed_input_string[*rw_cursor_pos])
     {
     case '[':
@@ -339,12 +350,12 @@ sregex_result_td parse_char_in_seq(char *borrowed_input_string, size_t *rw_curso
     }
 }
 
-sregex_result_td parse_char_class(char *borrowed_input_string, size_t *rw_cursor_pos, struct prod_atom *out);
-sregex_result_td parse_char_class_special(char *borrowed_input_string, size_t *rw_cursor_pos, enum prod_char_class_atom_type *out);
-sregex_result_td parse_grouping(char *borrowed_input_string, size_t *rw_cursor_pos, struct prod_expr *out);
-sregex_result_td parse_char_class_atom(char *borrowed_input_string, size_t *rw_cursor_pos, struct prod_char_class_atom *out);
-sregex_result_td parse_char_in_class(char *borrowed_input_string, size_t *rw_cursor_pos, sregex_char_td *out);
-sregex_result_td parse_char_range(char *borrowed_input_string, size_t *rw_cursor_pos, struct prod_char_range *out);
+sregex_result_td parse_char_class(char *borrowed_input_string, struct sregex_str_iter *rw_cursor_pos, struct prod_atom *out);
+sregex_result_td parse_char_class_special(char *borrowed_input_string, struct sregex_str_iter *rw_cursor_pos, enum prod_char_class_atom_type *out);
+sregex_result_td parse_grouping(char *borrowed_input_string, struct sregex_str_iter *rw_cursor_pos, struct prod_expr *out);
+sregex_result_td parse_char_class_atom(char *borrowed_input_string, struct sregex_str_iter *rw_cursor_pos, struct prod_char_class_atom *out);
+sregex_result_td parse_char_in_class(char *borrowed_input_string, struct sregex_str_iter *rw_cursor_pos, sregex_char_td *out);
+sregex_result_td parse_char_range(char *borrowed_input_string, struct sregex_str_iter *rw_cursor_pos, struct prod_char_range *out);
 
 void clear_expr(struct prod_expr *to_clear);
 void clear_expr_sequence(struct prod_expr_sequence *to_clear);
