@@ -125,7 +125,7 @@ sregex_result_td parse_natural_number
     struct sregex_str_iter *rw_cur_pos,
     unsigned int *out
 );
-sregex_result_td parse_char_in_seq
+sregex_result_td parse_char
 (
     struct sregex_str_iter *rw_cur_pos,
     sregex_char_td *out
@@ -133,7 +133,7 @@ sregex_result_td parse_char_in_seq
 sregex_result_td parse_char_class
 (
     struct sregex_str_iter *rw_cur_pos,
-    struct prod_atom *out
+    struct prod_char_class *out
 );
 sregex_result_td parse_char_class_special
 (
@@ -150,15 +150,34 @@ sregex_result_td parse_char_class_atom
     struct sregex_str_iter *rw_cur_pos,
     struct prod_char_class_atom *out
 );
-sregex_result_td parse_char_in_class
-(
-    struct sregex_str_iter *rw_cur_pos,
-    sregex_char_td *out
-);
 sregex_result_td parse_char_range
 (
     struct sregex_str_iter *rw_cur_pos,
     struct prod_char_range *out
+);
+sregex_result_td parse_esc_octal
+(
+    struct sregex_str_iter *rw_cur_pos,
+    sregex_char_td *out
+);
+sregex_result_td parse_esc_hex2
+(
+    struct sregex_str_iter *rw_cur_pos,
+    sregex_char_td *out
+);
+sregex_result_td parse_esc_hex4
+(
+    struct sregex_str_iter *rw_cur_pos,
+    sregex_char_td *out
+);
+sregex_result_td parse_esc_hex8
+(
+    struct sregex_str_iter *rw_cur_pos,
+    sregex_char_td *out
+);
+sregex_result_td parse_hex_digit(
+    struct sregex_str_iter *rw_cur_pos,
+    unsigned int *out
 );
 
 void clear_expr           (struct prod_expr            *borrowed_to_clear);

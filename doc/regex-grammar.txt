@@ -3,7 +3,7 @@ expr -> expr_choice;
 expr_choice -> expr_sequence, {"|", expr_sequence};
 expr_sequence -> quantified_atom+;
 quantified_atom -> atom, quantifier?;
-atom -> grouping | char_class | char_class_special | char_in_seq;
+atom -> grouping | char_class | char_class_special | char;
 grouping -> "(", expr, ")";
 #   escaped characters:
 #       escape character:
@@ -19,15 +19,16 @@ grouping -> "(", expr, ")";
 #               ] . ^ -
 #           For the sake of simplicity, if an opening brace needs to be escaped in a context, the closing brace should 
 #           be escaped as well, and vice versa.
+#           Again, for the sake of simplicity, we will combine the escapes from the two contexts (in sequence and in 
+#           class).
 #   regex character classes:
 #       \w (alphanum + underscore) \W (not alphanum + underscore) \d (digit) \D (not digit) \s (space) \S (not space)
 #   C escape characters (hard to print and/or arbitrary characters):
 #       \a \b \e \f \n \r \t \v \OOO \xXX \uXXXX \UXXXXXXXX
 char_class_special -> "\\w" | "\\W" | "\\d" | "\\D" | "\\s" | "\\S";
 char_class -> "[", "^"?, char_class_atom+, "]";
-char_class_atom -> char_in_class | char_range | char_class_special;
-char_range -> char_in_class, "-", char_in_class;
+char_class_atom -> char | char_range | char_class_special;
+char_range -> char, "-", char;
 quantifier -> "?" | "*" | "+" | "{", natural_number, ",", natural_number "}" | "{,", natural_number, "}" | "{", natural_number, ",}" | "{", natural_number, "}";
 natural_number -> "0" | /[1-9][0-9]*/;
-char_in_seq -> /[^\[\]\{\}\(\)\|\?\*\+\.\\]|\\a|\\b|\\e|\\f|\\n|\\r|\\t|\\v|\\\\|\\[0-7]{3}|\\x[0-9a-f]{2}|\\u[0-9a-f]{4}|\\U[0-9a-f]{8}|\\\[|\\\]|\\\{|\\\}|\\\(|\\\)|\\\||\\\?|\\\*|\\\+|\\\.|\\\\/;
-char_in_class -> /[^\[\]\.\^\-\\]|\\a|\\b|\\e|\\f|\\n|\\r|\\t|\\v|\\\\|\\[0-7]{3}|\\x[0-9a-f]{2}|\\u[0-9a-f]{4}|\\U[0-9a-f]{8}|\\\[|\\\]|\\\.|\\\^|\\\-|\\\\/;
+char -> /\\\\|\\\[|\\\]|\\\{|\\\}|\\\(|\\\)|\\\||\\\?|\\\*|\\\+|\\\.|\\\^|\\\-|\\a|\\b|\\e|\\f|\\n|\\r|\\t|\\v|\\[0-7]{3}|\\x[0-9a-f]{2}|\\u[0-9a-f]{4}|\\U[0-9a-f]{8}|[^\[\]\{\}\(\)\|\?\*\+\.\^\-\\]/

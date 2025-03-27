@@ -13,6 +13,7 @@ typedef uint8_t sregex_str_td; // utf-8, NULL terminated.
 struct sregex_str_iter
 {
     sregex_str_td *borrowed_str_cursor;
+    size_t         processed_code_point_count;
 };
 
 // All of the functions which take sregex_char_td and sregex_str_td expect well-formed code points and utf-8 strings 

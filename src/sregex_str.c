@@ -174,15 +174,17 @@ struct sregex_char_to_str_result sregex_char_to_str(sregex_char_td to_put)
 
 size_t sregex_str_char_count(sregex_str_td *borrowed)
 {
-    size_t result = 0;
-    struct sregex_str_iter it = { .borrowed_str_cursor = borrowed };
+    struct sregex_str_iter it = 
+    {
+        .borrowed_str_cursor = borrowed,
+        .processed_code_point_count = 0
+    };
     while(true)
     {
         sregex_char_td decoded = sregex_str_iter_step(&it);
         if(!decoded) break;
-        result++;
     }
-    return result;
+    return it.processed_code_point_count;
 }
 
 int sregex_char_cmp(sregex_char_td a, sregex_char_td b)
@@ -194,8 +196,16 @@ int sregex_char_cmp(sregex_char_td a, sregex_char_td b)
 
 int sregex_str_cmp(sregex_str_td *borrowed_a, sregex_str_td *borrowed_b)
 {
-    struct sregex_str_iter iter_a = { .borrowed_str_cursor = borrowed_a };
-    struct sregex_str_iter iter_b = { .borrowed_str_cursor = borrowed_b };
+    struct sregex_str_iter iter_a = 
+    {
+        .borrowed_str_cursor = borrowed_a,
+        .processed_code_point_count = 0
+    };
+    struct sregex_str_iter iter_b = 
+    {
+        .borrowed_str_cursor = borrowed_b,
+        .processed_code_point_count = 0
+    };
     while(true)
     {
         sregex_char_td c_a = sregex_str_iter_step(&iter_a);
@@ -221,7 +231,11 @@ sregex_str_td *sregex_str_cat(sregex_str_td *borrowed_first, sregex_str_td *borr
 sregex_char_td sregex_str_iter_step(struct sregex_str_iter *borrowed_iter)
 {
     struct sregex_str_to_char_result decoded = sregex_str_to_char(borrowed_iter->borrowed_str_cursor);
-    if(decoded.decoded_char != 0) borrowed_iter->borrowed_str_cursor += decoded.num_bytes_decoded;
+    if(decoded.decoded_char != 0)
+    {
+        borrowed_iter->borrowed_str_cursor += decoded.num_bytes_decoded;
+        borrowed_iter->processed_code_point_count++;
+    }
     return decoded.decoded_char;
 }
 
