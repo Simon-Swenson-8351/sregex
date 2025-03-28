@@ -599,66 +599,63 @@ sregex_result_td parse_esc_hex8(struct sregex_str_iter *rw_cur_pos, sregex_char_
 sregex_result_td parse_hex_digit(struct sregex_str_iter *rw_cur_pos, unsigned int *out)
 {
     sregex_char_td c = sregex_str_iter_get_char(rw_cur_pos);
-    switch(c)
-    {
-        case 0x00000030: // '0'
-            // fallthrough
-        case 0x00000031: // '1'
-            // fallthrough
-        case 0x00000032: // '2'
-            // fallthrough
-        case 0x00000033: // '3'
-            // fallthrough
-        case 0x00000034: // '4'
-            // fallthrough
-        case 0x00000035: // '5'
-            // fallthrough
-        case 0x00000036: // '6'
-            // fallthrough
-        case 0x00000037: // '7'
-            // fallthrough
-        case 0x00000038: // '8'
-            // fallthrough
-        case 0x00000039: // '9'
-            *out = c - 0x00000030;
-            break;
-        case 0x00000041: // 'A'
-            // fallthrough
-        case 0x00000042: // 'B'
-            // fallthrough
-        case 0x00000043: // 'C'
-            // fallthrough
-        case 0x00000044: // 'D'
-            // fallthrough
-        case 0x00000045: // 'E'
-            // fallthrough
-        case 0x00000046: // 'F'
-            *out = c - 0x00000037;
-            break;
-        case 0x00000061: // 'a'
-            // fallthrough
-        case 0x00000062: // 'b'
-            // fallthrough
-        case 0x00000063: // 'c'
-            // fallthrough
-        case 0x00000064: // 'd'
-            // fallthrough
-        case 0x00000065: // 'e'
-            // fallthrough
-        case 0x00000066: // 'f'
-            *out = c - 0x00000057;
-            break;
-        default:
-            return SREGEX_RESULT_PARSE_FAILED;
-    }
+    if(c >= 0x00000030 && c <= 0x00000039) *out = c - 0x00000030;
+    else if(c >= 0x00000041 && c <= 0x00000046) *out = c - 0x00000037;
+    else if(c >= 0x00000061 && c <= 0x00000066) *out = c - 0x00000057;
+    else return SREGEX_RESULT_PARSE_FAILED;
     sregex_str_iter_inc(rw_cur_pos);
     return SREGEX_RESULT_SUCCESS;
 }
 
-void clear_expr(struct prod_expr *to_clear);
-void clear_expr_sequence(struct prod_expr_sequence *to_clear);
-void clear_quantified_atom(struct prod_quantified_atom *to_clear);
-void clear_atom(struct prod_atom *to_clear);
-void clear_char_class(struct prod_char_class *to_clear);
-void clear_char_class_atom(struct prod_char_class_atom *to_clear);
-void clear_char_range(struct prod_char_range *to_clear);
+void clear_expr(struct prod_expr *to_clear)
+{
+    for(size_t i = 0; i < to_clear->choices_len; i++)
+    {
+        clear_expr_sequence(to_clear->choices + i);
+    }
+    free(to_clear->choices);
+}
+
+void clear_expr_sequence(struct prod_expr_sequence *to_clear)
+{
+    for(size_t i = 0; i < to_clear->quantified_atoms_len; i++)
+    {
+        clear_quantified_atom(to_clear->quantified_atoms + i);
+    }
+    free(to_clear->quantified_atoms);
+}
+
+void clear_quantified_atom(struct prod_quantified_atom *to_clear)
+{
+    clear_atom(&(to_clear->atom));
+}
+
+void clear_atom(struct prod_atom *to_clear)
+{
+    switch(to_clear->type)
+    {
+        case PROD_ATOM_TYPE_CHAR_CLASS:
+            clear_char_class(&(to_clear->data.char_class));
+        case PROD_ATOM_TYPE_GROUPING:
+            clear_expr(&(to_clear->data.grouping));
+    }
+}
+
+void clear_char_class(struct prod_char_class *to_clear)
+{
+    for(size_t i = 0; i < to_clear->atoms_len; i++)
+    {
+        clear_char_class_atom(to_clear->atoms + i);
+    }
+    free(to_clear->atoms);
+}
+
+void clear_char_class_atom(struct prod_char_class_atom *to_clear)
+{
+    if(to_clear->type == CHAR_CLASS_ATOM_TYPE_RANGE) clear_char_range(&(to_clear->data.range));
+}
+
+void clear_char_range(struct prod_char_range *to_clear)
+{
+
+}
