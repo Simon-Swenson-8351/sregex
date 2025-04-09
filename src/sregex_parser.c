@@ -7,34 +7,53 @@
 #include <stdlib.h>
 #include <string.h>
 
-struct parse_tree_create_result parse_tree_create(sregex_str_td *borrowed_input_string)
+enum sregex_result parse_expr              (struct sregex_str_iter *rw_cur_pos, struct prod_expr *out);
+enum sregex_result parse_sequence          (struct sregex_str_iter *rw_cur_pos, struct prod_expr_sequence *out);
+enum sregex_result parse_quantified_atom   (struct sregex_str_iter *rw_cur_pos, struct prod_quantified_atom *out);
+enum sregex_result parse_atom              (struct sregex_str_iter *rw_cur_pos, struct prod_atom *out);
+enum sregex_result parse_quantifier        (struct sregex_str_iter *rw_cur_pos, unsigned int *out_quantifier_min_incl, unsigned int *out_quantifier_max_incl);
+enum sregex_result parse_natural_number    (struct sregex_str_iter *rw_cur_pos, unsigned int *out);
+enum sregex_result parse_char              (struct sregex_str_iter *rw_cur_pos, sregex_char_td *out);
+enum sregex_result parse_char_class        (struct sregex_str_iter *rw_cur_pos, struct prod_char_class *out);
+enum sregex_result parse_char_class_special(struct sregex_str_iter *rw_cur_pos, enum prod_char_class_atom_type *out);
+enum sregex_result parse_grouping          (struct sregex_str_iter *rw_cur_pos, struct prod_expr *out);
+enum sregex_result parse_char_class_atom   (struct sregex_str_iter *rw_cur_pos, struct prod_char_class_atom *out);
+enum sregex_result parse_char_range        (struct sregex_str_iter *rw_cur_pos, struct prod_char_range *out);
+enum sregex_result parse_esc_octal         (struct sregex_str_iter *rw_cur_pos, sregex_char_td *out);
+enum sregex_result parse_esc_hex2          (struct sregex_str_iter *rw_cur_pos, sregex_char_td *out);
+enum sregex_result parse_esc_hex4          (struct sregex_str_iter *rw_cur_pos, sregex_char_td *out);
+enum sregex_result parse_esc_hex8          (struct sregex_str_iter *rw_cur_pos, sregex_char_td *out);
+enum sregex_result parse_hex_digit         (struct sregex_str_iter *rw_cur_pos, unsigned int *out);
+
+void clear_expr           (struct prod_expr            *borrowed_to_clear);
+void clear_expr_sequence  (struct prod_expr_sequence   *borrowed_to_clear);
+void clear_quantified_atom(struct prod_quantified_atom *borrowed_to_clear);
+void clear_atom           (struct prod_atom            *borrowed_to_clear);
+void clear_char_class     (struct prod_char_class      *borrowed_to_clear);
+
+struct parse_tree_create_result parse_tree_init(sregex_str_td *borrowed_input_string, struct parse_tree *borrowed_to_init)
 {
-    struct parse_tree_create_result result =
-    {
-        .result_code = SREGEX_RESULT_ALLOC_FAILED,
-        .error_index = 0,
-        .owned_created = malloc(sizeof(struct parse_tree))
-    };
-    if(!result.owned_created)
-    {
-        return result;
-    }
+    struct parse_tree_create_result result;
     struct sregex_str_iter iter = {
         .borrowed_str_cursor = borrowed_input_string,
         .processed_code_point_count = 0
     };
-    result.result_code = parse_expr(&iter, &(result.owned_created->root));
+    result.result_code = parse_expr(&iter, &(borrowed_to_init->root));
     if(result.result_code)
     {
-        free(result.owned_created);
         result.error_index = iter.borrowed_str_cursor - borrowed_input_string;
     }
     return result;
 }
 
-sregex_result_td parse_expr(struct sregex_str_iter *rw_cur_pos, struct prod_expr *out)
+void parse_tree_clear(struct parse_tree *given_to_clear)
 {
-    sregex_result_td result;
+    clear_expr(&(given_to_clear->root));
+}
+
+enum sregex_result parse_expr(struct sregex_str_iter *rw_cur_pos, struct prod_expr *out)
+{
+    enum sregex_result result;
     out->choices = NULL;
     out->choices_len = 0;
     
@@ -46,7 +65,7 @@ sregex_result_td parse_expr(struct sregex_str_iter *rw_cur_pos, struct prod_expr
         out->choices = reallocarray(out->choices, out->choices_len + 1, sizeof(out->choices[0]));
         out->choices[out->choices_len] = seq_to_add;
         out->choices_len++;
-        if(sregex_str_iter_get_char(rw_cur_pos) != sregex_ascii_to_char('|'))
+        if(sregex_str_iter_get_char(rw_cur_pos) != '|')
         {
             goto succeeded;
         }
@@ -64,9 +83,9 @@ failed:
     return result;
 }
 
-sregex_result_td parse_sequence(struct sregex_str_iter *rw_cur_pos, struct prod_expr_sequence *out)
+enum sregex_result parse_sequence(struct sregex_str_iter *rw_cur_pos, struct prod_expr_sequence *out)
 {
-    sregex_result_td result;
+    enum sregex_result result;
     out->quantified_atoms = NULL;
     out->quantified_atoms_len = 0;
 
@@ -108,9 +127,9 @@ failed:
     return result;
 }
 
-sregex_result_td parse_quantified_atom(struct sregex_str_iter *rw_cur_pos, struct prod_quantified_atom *out)
+enum sregex_result parse_quantified_atom(struct sregex_str_iter *rw_cur_pos, struct prod_quantified_atom *out)
 {
-    sregex_result_td result;
+    enum sregex_result result;
     struct prod_atom parsed_atom;
     result = parse_atom(rw_cur_pos, &parsed_atom);
     if(result) return result;
@@ -130,9 +149,9 @@ sregex_result_td parse_quantified_atom(struct sregex_str_iter *rw_cur_pos, struc
     return result;
 }
 
-sregex_result_td parse_atom(struct sregex_str_iter *rw_cur_pos, struct prod_atom *out)
+enum sregex_result parse_atom(struct sregex_str_iter *rw_cur_pos, struct prod_atom *out)
 {
-    sregex_result_td result;
+    enum sregex_result result;
     struct sregex_str_iter backtracker = *rw_cur_pos;
     result = parse_grouping(&backtracker, &out->data.grouping);
     if(!result)
@@ -166,24 +185,24 @@ sregex_result_td parse_atom(struct sregex_str_iter *rw_cur_pos, struct prod_atom
     return result;
 }
 
-sregex_result_td parse_quantifier(struct sregex_str_iter *rw_cur_pos, unsigned int *out_quantifier_min_incl, unsigned int *out_quantifier_max_incl)
+enum sregex_result parse_quantifier(struct sregex_str_iter *rw_cur_pos, unsigned int *out_quantifier_min_incl, unsigned int *out_quantifier_max_incl)
 {
-    sregex_result_td result;
-    if(sregex_str_iter_get_char(rw_cur_pos) == sregex_ascii_to_char('?'))
+    enum sregex_result result;
+    if(sregex_str_iter_get_char(rw_cur_pos) == '?')
     {
         sregex_str_iter_inc(rw_cur_pos);
         *out_quantifier_min_incl = 0;
         *out_quantifier_max_incl = 1;
         return SREGEX_RESULT_SUCCESS;
     }
-    if(sregex_str_iter_get_char(rw_cur_pos) == sregex_ascii_to_char('*'))
+    if(sregex_str_iter_get_char(rw_cur_pos) == '*')
     {
         sregex_str_iter_inc(rw_cur_pos);
         *out_quantifier_min_incl = 0;
         *out_quantifier_max_incl = UINT_MAX - 1;
         return SREGEX_RESULT_SUCCESS;
     }
-    if(sregex_str_iter_get_char(rw_cur_pos) == sregex_ascii_to_char('+'))
+    if(sregex_str_iter_get_char(rw_cur_pos) == '+')
     {
         sregex_str_iter_inc(rw_cur_pos);
         *out_quantifier_min_incl = 1;
@@ -191,7 +210,7 @@ sregex_result_td parse_quantifier(struct sregex_str_iter *rw_cur_pos, unsigned i
         return SREGEX_RESULT_SUCCESS;
     }
     // The options for a quantifier are now: {#} {#,#} {,#} {#,}
-    if(sregex_str_iter_get_char(rw_cur_pos) != sregex_ascii_to_char('{')) return SREGEX_RESULT_PARSE_FAILED;
+    if(sregex_str_iter_get_char(rw_cur_pos) != '{') return SREGEX_RESULT_PARSE_FAILED;
     sregex_str_iter_inc(rw_cur_pos);
     unsigned int qty_min = 0;
     unsigned int qty_max = UINT_MAX - 1;
@@ -200,7 +219,7 @@ sregex_result_td parse_quantifier(struct sregex_str_iter *rw_cur_pos, unsigned i
     if(result)
     {
         // This is not necessarily a problem. Could be of the form. {,#}
-        if(sregex_str_iter_get_char(rw_cur_pos) != sregex_ascii_to_char(',')) return SREGEX_RESULT_PARSE_FAILED;
+        if(sregex_str_iter_get_char(rw_cur_pos) != ',') return SREGEX_RESULT_PARSE_FAILED;
         sregex_str_iter_inc(rw_cur_pos);
         result = parse_natural_number(rw_cur_pos, &qty_max);
         if(result) return SREGEX_RESULT_PARSE_FAILED;
@@ -209,7 +228,7 @@ sregex_result_td parse_quantifier(struct sregex_str_iter *rw_cur_pos, unsigned i
     {
         // We've seen {# so we could see } ,#} ,}
         *rw_cur_pos = backtracker;
-        if(sregex_str_iter_get_char(rw_cur_pos) == sregex_ascii_to_char(','))
+        if(sregex_str_iter_get_char(rw_cur_pos) == ',')
         {
             sregex_str_iter_inc(rw_cur_pos);
             // {#,#} {#,}
@@ -225,21 +244,21 @@ sregex_result_td parse_quantifier(struct sregex_str_iter *rw_cur_pos, unsigned i
         }
     }
     // Should be at a point now to close out the bracketed expression
-    if(sregex_str_iter_get_char(rw_cur_pos) != sregex_ascii_to_char('}')) return SREGEX_RESULT_PARSE_FAILED;
+    if(sregex_str_iter_get_char(rw_cur_pos) != '}') return SREGEX_RESULT_PARSE_FAILED;
     *out_quantifier_min_incl = qty_min;
     *out_quantifier_max_incl = qty_max;
     return SREGEX_RESULT_SUCCESS;
 }
 
-sregex_result_td parse_natural_number(struct sregex_str_iter *rw_cur_pos, unsigned int *out)
+enum sregex_result parse_natural_number(struct sregex_str_iter *rw_cur_pos, unsigned int *out)
 {
     sregex_char_td c = sregex_str_iter_get_char(rw_cur_pos);
-    if(c == sregex_ascii_to_char('0'))
+    if(c == '0')
     {
         struct sregex_str_iter backtracker = *rw_cur_pos;
         sregex_str_iter_inc(&backtracker);
         c = sregex_str_iter_get_char(&backtracker);
-        if(c >= sregex_ascii_to_char('0') && c <= sregex_ascii_to_char('9'))
+        if(c >= '0' && c <= '9')
         {
             *rw_cur_pos = backtracker;
             return SREGEX_RESULT_PARSE_FAILED;
@@ -250,13 +269,13 @@ sregex_result_td parse_natural_number(struct sregex_str_iter *rw_cur_pos, unsign
             return SREGEX_RESULT_SUCCESS;
         }
     }
-    else if(c >= sregex_ascii_to_char('1') && c <= sregex_ascii_to_char('9'))
+    else if(c >= '1' && c <= '9')
     {
         *out = 0;
-        while(c >= sregex_ascii_to_char('0') && c <= sregex_ascii_to_char('9'))
+        while(c >= '0' && c <= '9')
         {
             *out *= 10;
-            *out += (unsigned int)(c - sregex_ascii_to_char('0'));
+            *out += (unsigned int)(c - '0');
             sregex_str_iter_inc(rw_cur_pos);
             c = sregex_str_iter_get_char(rw_cur_pos);
         }
@@ -268,119 +287,100 @@ sregex_result_td parse_natural_number(struct sregex_str_iter *rw_cur_pos, unsign
     }
 }
 
-sregex_result_td parse_char(struct sregex_str_iter *rw_cur_pos, sregex_char_td *out)
+enum sregex_result parse_char(struct sregex_str_iter *rw_cur_pos, sregex_char_td *out)
 {
-    sregex_result_td result;
+    enum sregex_result result;
     sregex_char_td c = sregex_str_iter_get_char(rw_cur_pos);
     switch(c)
     {
-        case 0x0000005b: // '['
-            // fallthrough
-        case 0x0000005d: // ']'
-            // fallthrough
-        case 0x0000007b: // '{'
-            // fallthrough
-        case 0x0000007d: // '}'
-            // fallthrough
-        case 0x00000028: // '('
-            // fallthrough
-        case 0x00000029: // ')'
-            // fallthrough
-        case 0x0000007c: // '|'
-            // fallthrough
-        case 0x0000003f: // '?'
-            // fallthrough
-        case 0x0000002a: // '*'
-            // fallthrough
-        case 0x0000002b: // '+'
-            // fallthrough
-        case 0x0000002e: // '.'
-            // fallthrough
-        case 0x0000005e: // '^'
-            // fallthrough
-        case 0x0000002d: // '-'
+        case '[':
+        case ']':
+        case '{':
+        case '}':
+        case '(':
+        case ')':
+        case '|':
+        case '?':
+        case '*':
+        case '+':
+        case '.':
+        case '^':
+        case '-':
             return SREGEX_RESULT_PARSE_FAILED;
-        case 0x0000005c: // '\\'
+        case '\\':
             sregex_str_iter_inc(rw_cur_pos);
             c = sregex_str_iter_get_char(rw_cur_pos);
             switch(c)
             {
-                case 0x00000061: // 'a' of "\a"
-                    *out = 0x00000007;
+                case 'a':
+                    *out = '\a';
                     sregex_str_iter_inc(rw_cur_pos);
                     break;
-                case 0x00000062: // 'b' of "\b"
-                    *out = 0x00000008;
+                case 'b':
+                    *out = '\b';
                     sregex_str_iter_inc(rw_cur_pos);
                     break;
-                case 0x00000065: // 'e' of "\e"
-                    *out = 0x0000001b;
+                case 'e':
+                    *out = '\e';
                     sregex_str_iter_inc(rw_cur_pos);
                     break;
-                case 0x00000066: // 'f' of "\f"
-                    *out = 0x0000000c;
+                case 'f':
+                    *out = '\f';
                     sregex_str_iter_inc(rw_cur_pos);
                     break;
-                case 0x0000006e: // 'n' of "\n"
-                    *out = 0x0000000a;
+                case 'n':
+                    *out = '\n';
                     sregex_str_iter_inc(rw_cur_pos);
                     break;
-                case 0x00000072: // 'r' of "\r"
-                    *out = 0x0000000d;
+                case 'r':
+                    *out = '\r';
                     sregex_str_iter_inc(rw_cur_pos);
                     break;
-                case 0x00000074: // 't' of "\t"
-                    *out = 0x00000009;
+                case 't':
+                    *out = '\t';
                     sregex_str_iter_inc(rw_cur_pos);
                     break;
-                case 0x00000076: // 'v' of "\v"
-                    *out = 0x0000000b;
+                case 'v':
+                    *out = '\v';
                     sregex_str_iter_inc(rw_cur_pos);
                     break;
-                case 0x00000030: // '0'
-                    // fallthrough
-                case 0x00000031: // '1'
-                    // fallthrough
-                case 0x00000032: // '2'
-                    // fallthrough
-                case 0x00000033: // '3'
-                    // fallthrough
-                case 0x00000034: // '4'
-                    // fallthrough
-                case 0x00000035: // '5'
-                    // fallthrough
-                case 0x00000036: // '6'
-                    // fallthrough
-                case 0x00000037: // '7'
+                case '0':
+                case '1':
+                case '2':
+                case '3':
+                case '4':
+                case '5':
+                case '6':
+                case '7':
                     // octal
                     if(result = parse_esc_octal(rw_cur_pos, out)) return result;
                     break;
-                case 'x': // 'x'
+                case 'x':
                     // hex XX
                     if(result = parse_esc_hex2(rw_cur_pos, out)) return result;
                     break;
-                case 'u': // 'u'
+                case 'u':
                     // unicode XXXX
                     if(result = parse_esc_hex4(rw_cur_pos, out)) return result;
                     break;
-                case 'U': // 'U'
+                case 'U':
                     // unicode XXXXXXXX
                     if(result = parse_esc_hex8(rw_cur_pos, out)) return result;
                     break;
-                case 0x0000005b: // '['
-                case 0x0000005d: // ']'
-                case 0x0000007b: // '{'
-                case 0x0000007d: // '}'
-                case 0x00000028: // '('
-                case 0x00000029: // ')'
-                case 0x0000007c: // '|'
-                case 0x0000003f: // '?'
-                case 0x0000002a: // '*'
-                case 0x0000002b: // '+'
-                case 0x0000002e: // '.'
-                case 0x0000005e: // '^'
-                case 0x0000002d: // '-'
-                case 0x0000005c: // '\\'
+                case '[':
+                case ']':
+                case '{':
+                case '}':
+                case '(':
+                case ')':
+                case '|':
+                case '?':
+                case '*':
+                case '+':
+                case '.':
+                case '^':
+                case '-':
+                case '\\':
                     *out = c;
                     sregex_str_iter_inc(rw_cur_pos);
                     break;
@@ -393,9 +393,10 @@ sregex_result_td parse_char(struct sregex_str_iter *rw_cur_pos, sregex_char_td *
             sregex_str_iter_inc(rw_cur_pos);
             break;
     }
+    return SREGEX_RESULT_SUCCESS;
 }
 
-sregex_result_td parse_char_class(struct sregex_str_iter *rw_cur_pos, struct prod_char_class *out)
+enum sregex_result parse_char_class(struct sregex_str_iter *rw_cur_pos, struct prod_char_class *out)
 {
     struct prod_char_class internal_result = 
     {
@@ -404,17 +405,17 @@ sregex_result_td parse_char_class(struct sregex_str_iter *rw_cur_pos, struct pro
         .atoms_len = 0
     };
     sregex_char_td c = sregex_str_iter_get_char(rw_cur_pos);
-    if(c != 0x0000005b) return SREGEX_RESULT_PARSE_FAILED;
+    if(c != '[') return SREGEX_RESULT_PARSE_FAILED;
     sregex_str_iter_inc(rw_cur_pos);
     c = sregex_str_iter_get_char(rw_cur_pos);
-    if(c == 0x0000005e)
+    if(c == '^')
     {
         out->neg = true;
         sregex_str_iter_inc(rw_cur_pos);
     }
     struct sregex_str_iter backtracker = *rw_cur_pos;
     struct prod_char_class_atom to_add;
-    sregex_result_td result;
+    enum sregex_result result;
     while(true)
     {
         result = parse_char_class_atom(&backtracker, &to_add);
@@ -436,40 +437,39 @@ sregex_result_td parse_char_class(struct sregex_str_iter *rw_cur_pos, struct pro
         internal_result.atoms_len++;
     }
     c = sregex_str_iter_get_char(rw_cur_pos);
-    if(c != 0x0000005d) goto failed;
+    if(c != ']') goto failed;
     sregex_str_iter_inc(rw_cur_pos);
     *out = internal_result;
     return SREGEX_RESULT_SUCCESS;
 failed:
-    for(size_t i = 0; i < internal_result.atoms_len; i++) clear_char_class_atom(internal_result.atoms + i);
     free(internal_result.atoms);
     return SREGEX_RESULT_PARSE_FAILED;
 }
 
-sregex_result_td parse_char_class_special(struct sregex_str_iter *rw_cur_pos, enum prod_char_class_atom_type *out)
+enum sregex_result parse_char_class_special(struct sregex_str_iter *rw_cur_pos, enum prod_char_class_atom_type *out)
 {
     sregex_char_td c = sregex_str_iter_get_char(rw_cur_pos);
-    if(c != 0x0000005c) return SREGEX_RESULT_PARSE_FAILED;
+    if(c != '\\') return SREGEX_RESULT_PARSE_FAILED;
     sregex_str_iter_inc(rw_cur_pos);
     c = sregex_str_iter_get_char(rw_cur_pos);
     switch(c)
     {
-        case 0x00000077: // 'w'
+        case 'w':
             *out = CHAR_CLASS_ATOM_TYPE_ALPHANUMUNDER;
             break;
-        case 0x00000057: // 'W'
+        case 'W':
             *out = CHAR_CLASS_ATOM_TYPE_NALPHANUMUNDER;
             break;
-        case 0x00000064: // 'd'
+        case 'd':
             *out = CHAR_CLASS_ATOM_TYPE_DIGIT;
             break;
-        case 0x00000044: // 'D'
+        case 'D':
             *out = CHAR_CLASS_ATOM_TYPE_NDIGIT;
             break;
-        case 0x00000073: // 's'
+        case 's':
             *out = CHAR_CLASS_ATOM_TYPE_WHITESPACE;
             break;
-        case 0x00000053: // 'S'
+        case 'S':
             *out = CHAR_CLASS_ATOM_TYPE_NWHITESPACE;
             break;
         default:
@@ -479,22 +479,22 @@ sregex_result_td parse_char_class_special(struct sregex_str_iter *rw_cur_pos, en
     return SREGEX_RESULT_SUCCESS;
 }
 
-sregex_result_td parse_grouping(struct sregex_str_iter *rw_cur_pos, struct prod_expr *out)
+enum sregex_result parse_grouping(struct sregex_str_iter *rw_cur_pos, struct prod_expr *out)
 {
     sregex_char_td c = sregex_str_iter_get_char(rw_cur_pos);
-    if(c != 0x00000028) return SREGEX_RESULT_PARSE_FAILED; // '('
+    if(c != '(') return SREGEX_RESULT_PARSE_FAILED;
     sregex_str_iter_inc(rw_cur_pos);
-    sregex_result_td result = parse_expr(rw_cur_pos, out);
+    enum sregex_result result = parse_expr(rw_cur_pos, out);
     if(result) return result;
     c = sregex_str_iter_get_char(rw_cur_pos);
-    if(c != 0x00000029) return SREGEX_RESULT_PARSE_FAILED; // ')'
+    if(c != ')') return SREGEX_RESULT_PARSE_FAILED;
     sregex_str_iter_inc(rw_cur_pos);
     return SREGEX_RESULT_SUCCESS;
 }
 
-sregex_result_td parse_char_class_atom(struct sregex_str_iter *rw_cur_pos, struct prod_char_class_atom *out)
+enum sregex_result parse_char_class_atom(struct sregex_str_iter *rw_cur_pos, struct prod_char_class_atom *out)
 {
-    sregex_result_td result;
+    enum sregex_result result;
     struct sregex_str_iter backtracker = *rw_cur_pos;
     result = parse_char(&backtracker, &(out->data.char_data));
     if(!result)
@@ -515,14 +515,14 @@ sregex_result_td parse_char_class_atom(struct sregex_str_iter *rw_cur_pos, struc
     return result;
 }
 
-sregex_result_td parse_char_range(struct sregex_str_iter *rw_cur_pos, struct prod_char_range *out)
+enum sregex_result parse_char_range(struct sregex_str_iter *rw_cur_pos, struct prod_char_range *out)
 {
-    sregex_result_td result;
+    enum sregex_result result;
     sregex_char_td low;
     sregex_char_td high;
     if(result = parse_char(rw_cur_pos, &low)) return result;
     sregex_char_td c = sregex_str_iter_get_char(rw_cur_pos);
-    if(c != 0x0000002d) return SREGEX_RESULT_PARSE_FAILED; // '-'
+    if(c != '-') return SREGEX_RESULT_PARSE_FAILED;
     sregex_str_iter_inc(rw_cur_pos);
     if(result = parse_char(rw_cur_pos, &high)) return result;
     if(low > high) return SREGEX_RESULT_PARSE_FAILED;
@@ -531,15 +531,15 @@ sregex_result_td parse_char_range(struct sregex_str_iter *rw_cur_pos, struct pro
     return SREGEX_RESULT_SUCCESS;
 }
 
-sregex_result_td parse_esc_octal(struct sregex_str_iter *rw_cur_pos, sregex_char_td *out)
+enum sregex_result parse_esc_octal(struct sregex_str_iter *rw_cur_pos, sregex_char_td *out)
 {
     sregex_char_td accumulator = 0;
     for(int i = 0; i < 3; i++)
     {
         sregex_char_td c = sregex_str_iter_get_char(rw_cur_pos);
-        if(c < sregex_ascii_to_char('0') || c > sregex_ascii_to_char('7')) return SREGEX_RESULT_PARSE_FAILED;
+        if(c < '0' || c > '7') return SREGEX_RESULT_PARSE_FAILED;
         accumulator <<= 3;
-        accumulator += c - sregex_ascii_to_char('0');
+        accumulator += c - '0';
         sregex_str_iter_inc(rw_cur_pos);
     }
     // Octal escapes can only represent a single byte.
@@ -549,13 +549,13 @@ sregex_result_td parse_esc_octal(struct sregex_str_iter *rw_cur_pos, sregex_char
     return SREGEX_RESULT_SUCCESS;
 }
 
-sregex_result_td parse_esc_hex2(struct sregex_str_iter *rw_cur_pos, sregex_char_td *out)
+enum sregex_result parse_esc_hex2(struct sregex_str_iter *rw_cur_pos, sregex_char_td *out)
 {
     sregex_char_td accumulator = 0;
     for(int i = 0; i < 2; i++)
     {
         unsigned int nibble;
-        sregex_result_td result = parse_hex_digit(rw_cur_pos, &nibble);
+        enum sregex_result result = parse_hex_digit(rw_cur_pos, &nibble);
         if(result) return result;
         accumulator <<= 4;
         accumulator += (sregex_char_td)nibble;
@@ -567,13 +567,13 @@ sregex_result_td parse_esc_hex2(struct sregex_str_iter *rw_cur_pos, sregex_char_
     return SREGEX_RESULT_SUCCESS;
 }
 
-sregex_result_td parse_esc_hex4(struct sregex_str_iter *rw_cur_pos, sregex_char_td *out)
+enum sregex_result parse_esc_hex4(struct sregex_str_iter *rw_cur_pos, sregex_char_td *out)
 {
     sregex_char_td accumulator = 0;
     for(int i = 0; i < 4; i++)
     {
         unsigned int nibble;
-        sregex_result_td result = parse_hex_digit(rw_cur_pos, &nibble);
+        enum sregex_result result = parse_hex_digit(rw_cur_pos, &nibble);
         if(result) return result;
         accumulator <<= 4;
         accumulator += (sregex_char_td)nibble;
@@ -582,13 +582,13 @@ sregex_result_td parse_esc_hex4(struct sregex_str_iter *rw_cur_pos, sregex_char_
     return SREGEX_RESULT_SUCCESS;
 }
 
-sregex_result_td parse_esc_hex8(struct sregex_str_iter *rw_cur_pos, sregex_char_td *out)
+enum sregex_result parse_esc_hex8(struct sregex_str_iter *rw_cur_pos, sregex_char_td *out)
 {
     sregex_char_td accumulator = 0;
     for(int i = 0; i < 2; i++)
     {
         unsigned int nibble;
-        sregex_result_td result = parse_hex_digit(rw_cur_pos, &nibble);
+        enum sregex_result result = parse_hex_digit(rw_cur_pos, &nibble);
         if(result) return result;
         accumulator <<= 4;
         accumulator += (sregex_char_td)nibble;
@@ -596,12 +596,13 @@ sregex_result_td parse_esc_hex8(struct sregex_str_iter *rw_cur_pos, sregex_char_
     *out = accumulator;
     return SREGEX_RESULT_SUCCESS;
 }
-sregex_result_td parse_hex_digit(struct sregex_str_iter *rw_cur_pos, unsigned int *out)
+
+enum sregex_result parse_hex_digit(struct sregex_str_iter *rw_cur_pos, unsigned int *out)
 {
     sregex_char_td c = sregex_str_iter_get_char(rw_cur_pos);
-    if(c >= 0x00000030 && c <= 0x00000039) *out = c - 0x00000030;
-    else if(c >= 0x00000041 && c <= 0x00000046) *out = c - 0x00000037;
-    else if(c >= 0x00000061 && c <= 0x00000066) *out = c - 0x00000057;
+    if(c >= '0' && c <= '9') *out = c - '0';
+    else if(c >= 'A' && c <= 'F') *out = c - 'A' + 10;
+    else if(c >= 'a' && c <= 'f') *out = c - 'a' + 10;
     else return SREGEX_RESULT_PARSE_FAILED;
     sregex_str_iter_inc(rw_cur_pos);
     return SREGEX_RESULT_SUCCESS;
@@ -643,19 +644,5 @@ void clear_atom(struct prod_atom *to_clear)
 
 void clear_char_class(struct prod_char_class *to_clear)
 {
-    for(size_t i = 0; i < to_clear->atoms_len; i++)
-    {
-        clear_char_class_atom(to_clear->atoms + i);
-    }
     free(to_clear->atoms);
-}
-
-void clear_char_class_atom(struct prod_char_class_atom *to_clear)
-{
-    if(to_clear->type == CHAR_CLASS_ATOM_TYPE_RANGE) clear_char_range(&(to_clear->data.range));
-}
-
-void clear_char_range(struct prod_char_range *to_clear)
-{
-
 }

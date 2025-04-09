@@ -1,5 +1,12 @@
 #pragma once
 
-typedef int sregex_result_td;
+enum sregex_result
+{
+    SREGEX_RESULT_SUCCESS,
+    SREGEX_RESULT_PARSE_FAILED,
+    SREGEX_RESULT_BAD_ARG,
+    SREGEX_RESULT_EOS,
+    SREGEX_RESULT_ALLOC_FAILED
+};
 
-char const *sregex_result_to_string(sregex_result_td err);
+char const *sregex_result_to_string(enum sregex_result result);
