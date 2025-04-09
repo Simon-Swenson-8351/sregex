@@ -35,5 +35,5 @@ Names of optional arguments, either input or output arguments, should reflect th
 # Read-Only Arguments
 
 The underlying data type of arguments passed by pointer should be marked `const` as in 
-`struct my_struct const *borrowed_my_arg`. Structs, aside from small structs with no pointer members, should never be 
+`struct my_struct const *borrowed_my_arg`. Structs, aside from small structs with no pointer members, should not be 
 passed by value.
